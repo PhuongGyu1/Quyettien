@@ -7,6 +7,7 @@ using System.Net;
 using System.Web;
 using System.Web.Mvc;
 using quyettien.Models;
+using System.Transactions; 
 
 namespace quyettien.Controllers
 {
@@ -48,17 +49,35 @@ namespace quyettien.Controllers
         // more details see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult Create([Bind(Include="id,MaSP,TenSP,Loai_id,GiaBan,GiaGoc,GiaGop,SoLuongTon")] BangSanPham bangsanpham)
+        public ActionResult Create( BangSanPham model )
         {
+            using (var scope = new TransactionScope())
+            {
+                db.BangSanPhams.Add(model);
+                db.SaveChanges();
+
+                var path = Server.MapPath("~/App_Data");
+                path = path + "/" + model.id;
+                if (Request.Files["HinhAnh"] != null && Request.Files["HinhAnh"].ContentLength > 0)
+                {
+                    Request.Files["HinhAnh"].SaveAs(path);
+
+                    scope.Complete();//approve for transaction
+                    return RedirectToAction("Index");
+                }
+                else
+                    ModelState.AddModelError("HinhAnh", "Chua co hinh SP");
+            }
+            checkBangSanPham(model);
             if (ModelState.IsValid)
             {
-                db.BangSanPhams.Add(bangsanpham);
+                db.BangSanPhams.Add(model);
                 db.SaveChanges();
                 return RedirectToAction("Index");
             }
 
-            ViewBag.Loai_id = new SelectList(db.LoaiSanPhams, "id", "TenLoai", bangsanpham.Loai_id);
-            return View(bangsanpham);
+            ViewBag.Loai_id = new SelectList(db.LoaiSanPhams, "id", "TenLoai", model.Loai_id);
+            return View(model);
         }
 
         // GET: /bangsanpham/Edit/5
@@ -75,6 +94,15 @@ namespace quyettien.Controllers
             }
             ViewBag.Loai_id = new SelectList(db.LoaiSanPhams, "id", "TenLoai", bangsanpham.Loai_id);
             return View(bangsanpham);
+        }
+        private void checkBangSanPham(BangSanPham model)
+        {
+            if (model.GiaGoc > 0)
+                ModelState.AddModelError("GiaGoc", " giá goc phai lon hon 0");
+            if (model.GiaGoc < model.GiaBan)
+                ModelState.AddModelError("GiaBan", " giá Ban phai lon hon 0");
+            if (model.GiaBan < model.GiaGop)
+                ModelState.AddModelError("GiaGop", " giá Ban phai lon hon 0");
         }
 
         // POST: /bangsanpham/Edit/5
